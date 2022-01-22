@@ -1,9 +1,12 @@
-const { App } = require('@slack/bolt');
+const { App, ExpressReceiver } = require('@slack/bolt');
+
+const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
 
 // Initializes your app with your bot token and signing secret
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  receiver
 });
 
 
@@ -32,7 +35,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": "*Welcome to SearchableVideos _App's Home_* :tada:"
+              "text": "*Welcome to your SearchableVideos new _App's Home_* :tada:"
             }
           },
           {
@@ -53,7 +56,8 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                 "text": {
                   "type": "plain_text",
                   "text": "Click me!"
-                }
+                },
+                "action_id": "first_button"
               }
             ]
           }
@@ -64,4 +68,20 @@ app.event('app_home_opened', async ({ event, client, context }) => {
   catch (error) {
     console.error(error);
   }
+});
+
+// Listen and respond to button click
+app.action('first_button', async({action, ack, context}) => {
+  console.log('button clicked hi there');
+  console.log(action);
+  // acknowledge the request right away
+  await ack();
+  
+  //await say('Thanks for clicking the fancy button');
+});
+
+
+receiver.router.get('/google-driver-picker', (req, res) => {
+  // You're working with an express req and res now.
+  res.sendFile('/Dev/slack-hackathon-transcribe-videos/google-picker.html');
 });
