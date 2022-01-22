@@ -1,0 +1,22 @@
+{
+  "name": "slack-hackathon-transcribe-videos",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidajoyce/slack-hackathon-transcribe-videos.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/davidajoyce/slack-hackathon-transcribe-videos/issues"
+  },
+  "homepage": "https://github.com/davidajoyce/slack-hackathon-transcribe-videos#readme",
+  "dependencies": {
+    "@slack/bolt": "^3.9.0"
+  }
+}
