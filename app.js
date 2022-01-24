@@ -61,7 +61,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                 "type": "button",
                 "text": {
                   "type": "plain_text",
-                  "text": "Click me!"
+                  "text": "Choose Google Drive Folder"
                 },
                 "action_id": "first_button",
                 "url": `https://2705-124-150-93-21.ngrok.io/google-driver-picker`
