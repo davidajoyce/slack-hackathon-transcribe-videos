@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "google-api-loader" : "https://apis.google.com/js/api.js?onload=loadPicker"
+    "google-api-loader": "https://apis.google.com/js/api.js?onload=loadPicker"
   },
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
   "homepage": "https://github.com/davidajoyce/slack-hackathon-transcribe-videos#readme",
   "dependencies": {
     "@slack/bolt": "^3.9.0",
+    "axios": "^0.25.0",
     "coffee-register": "^2.2.0",
     "coffee-script": "^1.12.7",
     "gapi": "^0.0.3"
