@@ -6,6 +6,18 @@ const SearchableVideosURI = 'http://localhost:3000';
 const bp = require('body-parser')
 bp.urlencoded({ extended: true })
 const express = require('express')
+const path = require("path");
+
+receiver.app.use(express.static(__dirname + '/'));
+receiver.app.use(bp.urlencoded({extend:true}));
+receiver.app.engine('html', require('ejs').renderFile);
+receiver.app.set('view engine', 'html');
+receiver.app.set('views', __dirname);
+
+/*
+receiver.app.set("view engine", "pug");
+receiver.app.set("views", path.join(__dirname, "views"));
+*/
 
 
 // Initializes your app with your bot token and signing secret
@@ -64,7 +76,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "text": "Choose Google Drive Video File"
                 },
                 "action_id": "first_button",
-                "url": `https://db91-124-150-93-21.ngrok.io/google-driver-picker`
+                "url": `https://e801-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
               }
             ]
           },
@@ -90,21 +102,27 @@ app.event('app_home_opened', async ({ event, client, context }) => {
   }
 });
 
-receiver.router.get('/google-driver-picker', (req, res) => {
-  // You're working with an express req and res now.
-  res.sendFile('/Dev/slack-hackathon-transcribe-videos/google-picker.html');
+receiver.router.get('/google-drive-picker/user/:user_id', (req, res) => {
+  // You're working with an express req and res now
+  console.log("user_id for google drive picker");
+  console.log(__dirname);
+  console.log(req.params);
+  //res.render('google-picker', {userId:req.params.user_id});
+  res.render('google-picker.html', {userId:req.params.user_id});
+  //res.sendFile('/Dev/slack-hackathon-transcribe-videos/google-picker.html');
 });
 
 receiver.router.use(express.json())
-receiver.router.post('/folder', (req, res) => {
-  console.log(req.body)
+receiver.router.post('/file', (req, res) => {
+  console.log(req.body);
   res.sendStatus(200);
 });
 
 // Listen and respond to button click
-app.action('first_button', async({action, ack, context}) => {
+app.action('first_button', async({action, body, ack, context, respond}) => {
   console.log('button clicked hi there');
   console.log(action);
+  console.log(body.user);
   // acknowledge the request right away
   await ack();
   //await say('Thanks for clicking the fancy button');
@@ -127,28 +145,13 @@ app.action('second_button', async({action, client, body, ack, context}) => {
         "callback_id": "slack_channel_modal",
         "title": {
           "type": "plain_text",
-          "text": "SLack Channel"
+          "text": "Slack Channel"
         },
         "submit": {
           "type": "plain_text",
           "text": "Submit"
         },
         "blocks": [
-          {
-            "type": "input",
-            "element": {
-              "type": "plain_text_input",
-              "action_id": "title",
-              "placeholder": {
-                "type": "plain_text",
-                "text": "Please select a slack channel to post your video transcript"
-              }
-            },
-            "label": {
-              "type": "plain_text",
-              "text": "Title"
-            }
-          },
           {
             "block_id": "target_channel",
             "type": "input",
@@ -191,7 +194,7 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   console.log(val);
   console.log(val.selected_channel);
 
-  /*
+  
   // Message to send user
   let msg = '';
   // Save to DB
@@ -214,6 +217,5 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   catch (error) {
     logger.error(error);
   }
-  */
-
+  
 });
