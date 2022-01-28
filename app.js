@@ -7,6 +7,10 @@ const bp = require('body-parser')
 bp.urlencoded({ extended: true })
 const express = require('express')
 const path = require("path");
+const userIdToFileId = new Map();
+const userIdToAuthToken = new Map();
+const fileIdToChannelId = new Map();
+const userIdToChannelId = new Map();
 
 receiver.app.use(express.static(__dirname + '/'));
 receiver.app.use(bp.urlencoded({extend:true}));
@@ -76,7 +80,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "text": "Choose Google Drive Video File"
                 },
                 "action_id": "first_button",
-                "url": `https://e801-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
+                "url": `https://ce35-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
               }
             ]
           },
@@ -114,7 +118,28 @@ receiver.router.get('/google-drive-picker/user/:user_id', (req, res) => {
 
 receiver.router.use(express.json())
 receiver.router.post('/file', (req, res) => {
+  console.log("file chosen")
   console.log(req.body);
+  console.log(req.body.fileId);
+  // create user objectg with authtoken and slackUserId
+  // UserId -> file
+  // UserId -> authToken 
+  // fileId -> channelId 
+  const slackUserId = req.body.slackUserId;
+  const fileId = req.body.fileId;
+  const authToken = req.body.authToken;
+  userIdToFileId.set(slackUserId, fileId);
+  userIdToAuthToken.set(slackUserId, authToken);
+
+  // function to get the file from google drive API and download so we can transcribe it
+  // map of fileId to saved file from google drive 
+
+  if(userIdToChannelId.has(userId)){
+    //function to kick off message at least to user saying the transcribing will start soon 
+    //Get location to downloaded file and kick off the transcribe process
+    //this will be repeated when you choose the slack channel 
+  }
+
   res.sendStatus(200);
 });
 
@@ -188,29 +213,33 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   // Do whatever you want with the input data - here we're saving it to a DB then sending the user a verifcation of their submission
 
   // Assume there's an input block with `block_1` as the block_id and `input_a`
-  const val = view['state']['values']['target_channel']['target_select']['selected_channels'];
-  const user = body['user']['id'];
+  const selected_channels = view['state']['values']['target_channel']['target_select']['selected_channels'];
+  const user = body['user'];
   console.log("input from select channel modal")
-  console.log(val);
-  console.log(val.selected_channel);
+  console.log(selected_channels);
+  console.log(user);
+  console.log(user.id);
+
+  //need to handle the case where a user hasn't chosen the fileId, could just have a message saying please choose a file from google drive 
 
   
   // Message to send user
   let msg = '';
   // Save to DB
-  const results = await db.set(user.input, val);
+  //const results = await db.set(user.input, val);
+  userIdToChannelId.set(user.id, selected_channels);
 
-  if (results) {
+  if (userIdToFileId.has(user.id)) {
     // DB save was successful
-    msg = 'Your submission was successful';
+    msg = 'We have started your video transcribing';
   } else {
-    msg = 'There was an error with your submission';
+    msg = 'Please choose a file from google drive to transcribe';
   }
 
   // Message the user
   try {
     await client.chat.postMessage({
-      channel: user,
+      channel: user.id,
       text: msg
     });
   }
