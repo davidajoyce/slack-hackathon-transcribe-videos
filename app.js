@@ -8,6 +8,8 @@ const readline = require('readline');
 const {google} = require('googleapis');
 const bp = require('body-parser')
 const uuid = require('uuid');
+const ffmpeg = require('fluent-ffmpeg');
+const speech = require('@google-cloud/speech').v1p1beta1;
 
 bp.urlencoded({ extended: true })
 const express = require('express')
@@ -275,7 +277,14 @@ function downloadFileToTranscribe(credentials, file_id, user_id){
   oAuth2Client.setCredentials({access_token: authToken});
 
   const drive = google.drive({version: 'v3', oAuth2Client});
-+
+  const videoFileName = uuid.v4() + '.mp4';
+  const testVideoFileName = 'b5dec068-a630-4747-b36d-e21064ccf2d3.mp4';
+  const testVideoFilePath = path.join(__dirname, testVideoFileName);
+  console.log("video file path");
+  console.log(testVideoFilePath);
+  transformVideoFileToAudioFile(testVideoFileName);
+
+/*
   drive.files
       .get({fileId: file_id, alt: 'media', auth: oAuth2Client}, {responseType: 'stream'})
       .then(res => {
@@ -287,8 +296,9 @@ function downloadFileToTranscribe(credentials, file_id, user_id){
   
           res.data
             .on('end', () => {
-              console.log('Done downloading file.');
+              console.log(' Done downloading file.');
               resolve(filePath);
+              transcribeVideoFile(filePath);
             })
             .on('error', err => {
               console.error('Error downloading file.');
@@ -304,5 +314,62 @@ function downloadFileToTranscribe(credentials, file_id, user_id){
             })
             .pipe(dest);
         });
-      });
+    });  
+    */
+}
+
+function transformVideoFileToAudioFile(videoFilePath){
+  console.log("attempting to convert video to audio");
+  console.log(videoFilePath);
+  const flacFileName = uuid.v4() + '.flac';
+  ffmpeg(videoFilePath)
+  .on('error', function(err) {
+    console.log('An error occurred: ' + err.message);
+  })
+  .on('end', function() {
+    console.log('Processing finished !');
+    transcribeAudioFile(flacFileName);
+  })
+  .save(path.join(__dirname, flacFileName));
+}
+
+
+// Creates a client
+const speechClient = new speech.SpeechClient();
+
+/**
+ * TODO(developer): Uncomment the following lines before running the sample.
+ */
+// const filename = 'Local path to audio file, e.g. /path/to/audio.raw';
+const model = 'video';
+const encoding = 'FLAC';
+const sampleRateHertz = 16000;
+const languageCode = 'en-US';
+const audioChannelCount = 2;
+
+const config = {
+  encoding: encoding,
+  //sampleRateHertz: sampleRateHertz,
+  languageCode: languageCode,
+  model: model,
+  audioChannelCount: audioChannelCount
+};
+
+async function transcribeAudioFile(audioFileName){
+  const audioFilePath = path.join(__dirname, audioFileName);
+
+  const audio = {
+    content: fs.readFileSync(audioFilePath).toString('base64'),
+  };
+
+  const request = {
+    config: config,
+    audio: audio,
+  };
+  // Detects speech in the audio file
+  const [response] = await speechClient.recognize(request);
+  const transcription = response.results
+    .map(result => result.alternatives[0].transcript)
+    .join('\n');
+  console.log('Transcription: ', transcription);
 }
