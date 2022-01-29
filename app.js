@@ -3,7 +3,12 @@ const { App, ExpressReceiver } = require('@slack/bolt');
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
 const axios = require('axios')
 const SearchableVideosURI = 'http://localhost:3000';
+const fs = require('fs');
+const readline = require('readline');
+const {google} = require('googleapis');
 const bp = require('body-parser')
+const uuid = require('uuid');
+
 bp.urlencoded({ extended: true })
 const express = require('express')
 const path = require("path");
@@ -134,7 +139,7 @@ receiver.router.post('/file', (req, res) => {
   // function to get the file from google drive API and download so we can transcribe it
   // map of fileId to saved file from google drive 
 
-  if(userIdToChannelId.has(userId)){
+  if(userIdToChannelId.has(slackUserId)){
     //function to kick off message at least to user saying the transcribing will start soon 
     //Get location to downloaded file and kick off the transcribe process
     //this will be repeated when you choose the slack channel 
@@ -221,8 +226,6 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   console.log(user.id);
 
   //need to handle the case where a user hasn't chosen the fileId, could just have a message saying please choose a file from google drive 
-
-  
   // Message to send user
   let msg = '';
   // Save to DB
@@ -232,6 +235,7 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   if (userIdToFileId.has(user.id)) {
     // DB save was successful
     msg = 'We have started your video transcribing';
+    transcribeFileForUser(user.id, userIdToFileId.get(user.id));
   } else {
     msg = 'Please choose a file from google drive to transcribe';
   }
@@ -248,3 +252,57 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   }
   
 });
+
+function transcribeFileForUser(user_id, fileId) {
+  fs.readFile(__dirname + '/credentials.json', (err, content) => {
+    if (err) return console.log('Error loading client secret file:', err);
+    downloadFileToTranscribe(JSON.parse(content), fileId, user_id)
+  });
+}
+
+function downloadFileToTranscribe(credentials, file_id, user_id){
+  console.log(credentials);
+  var authToken = userIdToAuthToken.get(user_id);
+  const client_id = credentials.client_id;
+  const client_secret = credentials.client_secret;
+  console.log('client_id then client_secret and authToken');
+  console.log(client_id);
+  console.log(client_secret);
+  console.log(authToken);
+  const oAuth2Client = new google.auth.OAuth2(
+      client_id, client_secret);
+  // Check if we have previously stored a token.
+  oAuth2Client.setCredentials({access_token: authToken});
+
+  const drive = google.drive({version: 'v3', oAuth2Client});
++
+  drive.files
+      .get({fileId: file_id, alt: 'media', auth: oAuth2Client}, {responseType: 'stream'})
+      .then(res => {
+        return new Promise((resolve, reject) => {
+          const filePath = path.join(__dirname, uuid.v4() + '.mp4');
+          console.log(`writing to ${filePath}`);
+          const dest = fs.createWriteStream(filePath);
+          let progress = 0;
+  
+          res.data
+            .on('end', () => {
+              console.log('Done downloading file.');
+              resolve(filePath);
+            })
+            .on('error', err => {
+              console.error('Error downloading file.');
+              reject(err);
+            })
+            .on('data', d => {
+              progress += d.length;
+              if (process.stdout.isTTY) {
+                process.stdout.clearLine();
+                process.stdout.cursorTo(0);
+                process.stdout.write(`Downloaded ${progress} bytes`);
+              }
+            })
+            .pipe(dest);
+        });
+      });
+}
