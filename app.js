@@ -14,6 +14,7 @@ const speech = require('@google-cloud/speech').v1p1beta1;
 bp.urlencoded({ extended: true })
 const express = require('express')
 const path = require("path");
+const { start } = require('repl');
 const userIdToFileId = new Map();
 const userIdToAuthToken = new Map();
 const fileIdToChannelId = new Map();
@@ -352,7 +353,8 @@ const config = {
   //sampleRateHertz: sampleRateHertz,
   languageCode: languageCode,
   model: model,
-  audioChannelCount: audioChannelCount
+  audioChannelCount: audioChannelCount,
+  enableWordTimeOffsets: true
 };
 
 async function transcribeAudioFile(audioFileName){
@@ -366,10 +368,40 @@ async function transcribeAudioFile(audioFileName){
     config: config,
     audio: audio,
   };
+  
   // Detects speech in the audio file
   const [response] = await speechClient.recognize(request);
-  const transcription = response.results
-    .map(result => result.alternatives[0].transcript)
-    .join('\n');
-  console.log('Transcription: ', transcription);
+
+  var transcriptTimeStamp = []
+  var totalTimeSeconds = Number(0);
+  const timeStampInterval = Number(2);
+  response.results.forEach(result => {
+    console.log(`Transcription: ${result.alternatives[0].transcript}`);
+    var startTime = Number(0);
+    console.log('startTime', startTime);
+    var transcriptTimeStampSentence = '0.00' + '\n';
+    // in the form 0.00, 0.10, 1.16
+    result.alternatives[0].words.forEach(wordInfo => {
+      // NOTE: If you have a time offset exceeding 2^32 seconds, use the
+      // wordInfo.{x}Time.seconds.high to calculate seconds.
+      const wordStartSec = Number(wordInfo.startTime.seconds);
+      totalTimeSeconds = wordStartSec;
+      const timeBetweenWords = wordStartSec - startTime;
+      if(timeBetweenWords >= timeStampInterval){
+        transcriptTimeStampSentence += ' ' + wordInfo.word;
+        transcriptTimeStamp.push(transcriptTimeStampSentence);
+        var minute = Math.floor(totalTimeSeconds/60);
+        var seconds = totalTimeSeconds % 60;
+        var secondsTranscript = seconds;
+        if(secondsTranscript < 10) {
+          secondsTranscript = '0' + secondsTranscript;
+        }
+        startTime = wordStartSec;
+        transcriptTimeStampSentence = minute + '.' + secondsTranscript + '\n';
+      } else {
+        transcriptTimeStampSentence += ' ' + wordInfo.word;
+      }
+    });
+  });
+  console.log(transcriptTimeStamp);
 }
