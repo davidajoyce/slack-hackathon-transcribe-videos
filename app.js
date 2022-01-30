@@ -88,7 +88,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "text": "Choose Google Drive Video File"
                 },
                 "action_id": "first_button",
-                "url": `https://ce35-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
+                "url": `https://e316-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
               }
             ]
           },
@@ -223,6 +223,10 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   // Assume there's an input block with `block_1` as the block_id and `input_a`
   const selected_channels = view['state']['values']['target_channel']['target_select']['selected_channels'];
   const user = body['user'];
+  console.log('payload of view submission', body);
+  console.log('body', body['view']['state']['values']['target_channel']);
+  console.log('view of view submission', view);
+  console.log('view', view['state']['values']['target_channel'])
   console.log("input from select channel modal")
   console.log(selected_channels);
   console.log(user);
@@ -238,7 +242,7 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   if (userIdToFileId.has(user.id)) {
     // DB save was successful
     msg = 'We have started your video transcribing';
-    transcribeFileForUser(user.id, userIdToFileId.get(user.id));
+    transcribeFileForUser(user.id, userIdToFileId.get(user.id), userIdToChannelId.get(user.id));
   } else {
     msg = 'Please choose a file from google drive to transcribe';
   }
@@ -251,19 +255,19 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
     });
   }
   catch (error) {
-    logger.error(error);
+    console.log(error);
   }
   
 });
 
-function transcribeFileForUser(user_id, fileId) {
+function transcribeFileForUser(user_id, fileId, channelId) {
   fs.readFile(__dirname + '/credentials.json', (err, content) => {
     if (err) return console.log('Error loading client secret file:', err);
-    downloadFileToTranscribe(JSON.parse(content), fileId, user_id)
+    downloadFileToTranscribe(JSON.parse(content), fileId, user_id, channelId)
   });
 }
 
-function downloadFileToTranscribe(credentials, file_id, user_id){
+function downloadFileToTranscribe(credentials, file_id, user_id, channelId){
   console.log(credentials);
   var authToken = userIdToAuthToken.get(user_id);
   const client_id = credentials.client_id;
@@ -283,7 +287,7 @@ function downloadFileToTranscribe(credentials, file_id, user_id){
   const testVideoFilePath = path.join(__dirname, testVideoFileName);
   console.log("video file path");
   console.log(testVideoFilePath);
-  transformVideoFileToAudioFile(testVideoFileName);
+  transformVideoFileToAudioFile(testVideoFileName, channelId);
 
 /*
   drive.files
@@ -319,7 +323,7 @@ function downloadFileToTranscribe(credentials, file_id, user_id){
     */
 }
 
-function transformVideoFileToAudioFile(videoFilePath){
+function transformVideoFileToAudioFile(videoFilePath, channelId){
   console.log("attempting to convert video to audio");
   console.log(videoFilePath);
   const flacFileName = uuid.v4() + '.flac';
@@ -329,7 +333,7 @@ function transformVideoFileToAudioFile(videoFilePath){
   })
   .on('end', function() {
     console.log('Processing finished !');
-    transcribeAudioFile(flacFileName);
+    transcribeAudioFile(flacFileName, channelId);
   })
   .save(path.join(__dirname, flacFileName));
 }
@@ -357,7 +361,7 @@ const config = {
   enableWordTimeOffsets: true
 };
 
-async function transcribeAudioFile(audioFileName){
+async function transcribeAudioFile(audioFileName, channelId){
   const audioFilePath = path.join(__dirname, audioFileName);
 
   const audio = {
@@ -368,7 +372,7 @@ async function transcribeAudioFile(audioFileName){
     config: config,
     audio: audio,
   };
-  
+
   // Detects speech in the audio file
   const [response] = await speechClient.recognize(request);
 
@@ -404,4 +408,37 @@ async function transcribeAudioFile(audioFileName){
     });
   });
   console.log(transcriptTimeStamp);
+  sendTranscriptToChannel(transcriptTimeStamp, channelId);
+}
+
+async function sendTranscriptToChannel(transcriptTimeStamp, channelId){
+  // Message the channelId associated with video
+  // the text would like it to be a link to google drive file?
+  console.log("channel id") 
+  console.log(channelId);
+  const msg ='testing stuff';
+  try {
+    const response = await app.client.chat.postMessage({
+      channel: channelId[0],
+      text: msg
+    });
+
+    console.log(response.ts);
+    console.log(transcriptTimeStamp[0]);
+    for(var index in transcriptTimeStamp){
+      sendTranscriptToThread(transcriptTimeStamp[index], response.ts, channelId[0]);
+    }
+  }
+  catch (error) {
+    console.log(error);
+  }
+
+}
+
+function sendTranscriptToThread(message, thread, channelId){
+  app.client.chat.postMessage({
+    channel: channelId,
+    text: message,
+    thread_ts: thread
+  });
 }
