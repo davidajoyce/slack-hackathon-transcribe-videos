@@ -267,7 +267,7 @@ function transcribeFileForUser(user_id, fileId, channelId) {
   });
 }
 
-function downloadFileToTranscribe(credentials, file_id, user_id, channelId){
+async function downloadFileToTranscribe(credentials, file_id, user_id, channelId){
   console.log(credentials);
   var authToken = userIdToAuthToken.get(user_id);
   const client_id = credentials.client_id;
@@ -287,23 +287,30 @@ function downloadFileToTranscribe(credentials, file_id, user_id, channelId){
   const testVideoFilePath = path.join(__dirname, testVideoFileName);
   console.log("video file path");
   console.log(testVideoFilePath);
-  transformVideoFileToAudioFile(testVideoFileName, channelId);
+  //transformVideoFileToAudioFile(testVideoFileName, channelId);
 
-/*
-  drive.files
-      .get({fileId: file_id, alt: 'media', auth: oAuth2Client}, {responseType: 'stream'})
+  const fileInfo = await getFileInfo(file_id, oAuth2Client, drive);
+  const driveUrl = fileInfo.webViewLink;
+  const fileName = fileInfo.name;
+  const slackPostMessage = fileName + ' : ' + driveUrl + ' see Transcript in thread';
+  console.log("waiting for ", driveUrl);
+  const filePath =  await downloadFile(file_id, oAuth2Client, drive);
+  transformVideoFileToAudioFile(filePath, channelId, slackPostMessage);
+}
+
+function downloadFile(file_id, oAuth2Client, drive){
+  return drive.files
+      .get({fileId: file_id, fields: 'webViewLink', alt: 'media', auth: oAuth2Client}, {responseType: 'stream'})
       .then(res => {
         return new Promise((resolve, reject) => {
           const filePath = path.join(__dirname, uuid.v4() + '.mp4');
           console.log(`writing to ${filePath}`);
           const dest = fs.createWriteStream(filePath);
           let progress = 0;
-  
           res.data
             .on('end', () => {
               console.log(' Done downloading file.');
               resolve(filePath);
-              transcribeVideoFile(filePath);
             })
             .on('error', err => {
               console.error('Error downloading file.');
@@ -319,11 +326,20 @@ function downloadFileToTranscribe(credentials, file_id, user_id, channelId){
             })
             .pipe(dest);
         });
-    });  
-    */
+    }); 
 }
 
-function transformVideoFileToAudioFile(videoFilePath, channelId){
+function getFileInfo(file_id, oAuth2Client, drive){
+   return drive.files
+      .get({fileId: file_id, fields: 'webViewLink,name', auth: oAuth2Client})
+      .then(res => {
+        console.log("testing drive url", res.data.webViewLink);
+        console.log("name of drive url", res.data.name);
+        return res.data;
+    });
+}
+
+function transformVideoFileToAudioFile(videoFilePath, channelId, driveUrl){
   console.log("attempting to convert video to audio");
   console.log(videoFilePath);
   const flacFileName = uuid.v4() + '.flac';
@@ -333,7 +349,7 @@ function transformVideoFileToAudioFile(videoFilePath, channelId){
   })
   .on('end', function() {
     console.log('Processing finished !');
-    transcribeAudioFile(flacFileName, channelId);
+    transcribeAudioFile(flacFileName, channelId, driveUrl);
   })
   .save(path.join(__dirname, flacFileName));
 }
@@ -361,7 +377,7 @@ const config = {
   enableWordTimeOffsets: true
 };
 
-async function transcribeAudioFile(audioFileName, channelId){
+async function transcribeAudioFile(audioFileName, channelId, driveUrl){
   const audioFilePath = path.join(__dirname, audioFileName);
 
   const audio = {
@@ -408,10 +424,10 @@ async function transcribeAudioFile(audioFileName, channelId){
     });
   });
   console.log(transcriptTimeStamp);
-  sendTranscriptToChannel(transcriptTimeStamp, channelId);
+  sendTranscriptToChannel(transcriptTimeStamp, channelId, driveUrl);
 }
 
-async function sendTranscriptToChannel(transcriptTimeStamp, channelId){
+async function sendTranscriptToChannel(transcriptTimeStamp, channelId, driveUrl){
   // Message the channelId associated with video
   // the text would like it to be a link to google drive file?
   console.log("channel id") 
@@ -420,25 +436,21 @@ async function sendTranscriptToChannel(transcriptTimeStamp, channelId){
   try {
     const response = await app.client.chat.postMessage({
       channel: channelId[0],
-      text: msg
+      text: driveUrl
     });
 
     console.log(response.ts);
     console.log(transcriptTimeStamp[0]);
     for(var index in transcriptTimeStamp){
-      sendTranscriptToThread(transcriptTimeStamp[index], response.ts, channelId[0]);
+      await app.client.chat.postMessage({
+        channel: channelId[0],
+        text: transcriptTimeStamp[index],
+        thread_ts: response.ts
+      });
     }
   }
   catch (error) {
     console.log(error);
   }
 
-}
-
-function sendTranscriptToThread(message, thread, channelId){
-  app.client.chat.postMessage({
-    channel: channelId,
-    text: message,
-    thread_ts: thread
-  });
 }
