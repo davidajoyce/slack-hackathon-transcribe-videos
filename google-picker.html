@@ -8,18 +8,17 @@
 
     // The Browser API key obtained from the Google API Console.
     // Replace with your own Browser API key, or your own key.
-    var developerKey = Credentials.DEVELOPER_KEY;
+    var developerKey = '<FILL-IN>';
 
     // The Client ID obtained from the Google API Console. Replace with your own Client ID.
-    var clientId = Credentials.CLIENT_ID;
+    var clientId = "<FILL-IN>"
 
     // Replace with your own project number from console.developers.google.com.
     // See "Project number" under "IAM & Admin" > "Settings"
-    var appId = Credentials.APP_ID;
+    var appId = "<FILL-IN>";
 
     // Scope to use to access user's Drive items.
     var scope = ['https://www.googleapis.com/auth/drive'];
-    //https://www.googleapis.com/auth/drive
 
     var pickerApiLoaded = false;
     var oauthToken;
@@ -49,7 +48,8 @@
       console.log("testing")
       if (authResult && !authResult.error) {
         oauthToken = authResult.access_token;
-        console.log("about to create picker")
+        console.log("about to create picker");
+        console.log(userId);
         createPicker();
       }
     }
@@ -57,9 +57,10 @@
     // Create and render a Picker object for searching images.
     function createPicker() {
       if (pickerApiLoaded && oauthToken) {
-        var view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-                      .setSelectFolderEnabled(true);
-        view.setMimeTypes("image/png,image/jpeg,image/jpg");
+        var view = new google.picker.DocsView(google.picker.ViewId.FILES)
+                      //.setSelectFolderEnabled(true);
+        //view.setMimeTypes("image/png,image/jpeg,image/jpg");
+        view.setMimeTypes("video/mp4");
         var picker = new google.picker.PickerBuilder()
             .enableFeature(google.picker.Feature.NAV_HIDDEN)
             .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
@@ -77,11 +78,15 @@
     // A simple callback implementation.
     function pickerCallback(data) {
       if (data.action == google.picker.Action.PICKED) {
-        var chosenFolderId = data.docs[0].id;
-        axios.post('https://2705-124-150-93-21.ngrok.io/folder', 
+        var chosenFileId = data.docs[0].id;
+        axios.post('https://e316-124-150-93-21.ngrok.io/file', 
                   {
-                    folderId : chosenFolderId
+                    fileId : chosenFileId,
+                    authToken : oauthToken,
+                    slackUserId: userId
                   });
+        // fill in API_ID with slack API ID
+        window.location.replace('https://slack.com/app_redirect?app=<API_ID>');
       }
     }
     </script>
@@ -93,6 +98,6 @@
     <script type="text/javascript" src="https://apis.google.com/js/api.js?onload=loadPicker"></script>
     <!-- axios requests -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <script type="text/javascript" src="credentials.js"></script>
+    <script>var userId = "<%= userId %>";</script>
   </body>
 </html>

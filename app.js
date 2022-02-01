@@ -1,8 +1,6 @@
 const { App, ExpressReceiver } = require('@slack/bolt');
 
 const receiver = new ExpressReceiver({ signingSecret: process.env.SLACK_SIGNING_SECRET });
-const axios = require('axios')
-const SearchableVideosURI = 'http://localhost:3000';
 const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
@@ -17,7 +15,6 @@ const path = require("path");
 const { start } = require('repl');
 const userIdToFileId = new Map();
 const userIdToAuthToken = new Map();
-const fileIdToChannelId = new Map();
 const userIdToChannelId = new Map();
 
 receiver.app.use(express.static(__dirname + '/'));
@@ -25,11 +22,6 @@ receiver.app.use(bp.urlencoded({extend:true}));
 receiver.app.engine('html', require('ejs').renderFile);
 receiver.app.set('view engine', 'html');
 receiver.app.set('views', __dirname);
-
-/*
-receiver.app.set("view engine", "pug");
-receiver.app.set("views", path.join(__dirname, "views"));
-*/
 
 
 // Initializes your app with your bot token and signing secret
@@ -65,7 +57,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": "*Welcome to your SearchableVideos new _App's Home_* :tada:"
+              "text": "*Welcome to SearchableVideos* :tada:"
             }
           },
           {
@@ -75,8 +67,11 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             "type": "section",
             "text": {
               "type": "mrkdwn",
-              "text": "This button won't do much for now but you can set up a listener for it using the `actions()` method and passing its unique `action_id`. See an example in the `examples` folder within your Bolt app."
+              "text": "Please choose your video and slack channel so it can become searchable in slack. You will receive a message when we start to transcribe the video chosen. Then you will see a link to your video posted to the slack channel chosen along with the transcript in the thread"
             }
+          },
+          {
+            "type": "divider"
           },
           {
             "type": "actions",
@@ -91,6 +86,9 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                 "url": `https://e316-124-150-93-21.ngrok.io/google-drive-picker/user/${event.user}`
               }
             ]
+          },
+          {
+            "type": "divider"
           },
           {
             "type": "actions",
@@ -115,37 +113,19 @@ app.event('app_home_opened', async ({ event, client, context }) => {
 });
 
 receiver.router.get('/google-drive-picker/user/:user_id', (req, res) => {
-  // You're working with an express req and res now
-  console.log("user_id for google drive picker");
-  console.log(__dirname);
-  console.log(req.params);
-  //res.render('google-picker', {userId:req.params.user_id});
   res.render('google-picker.html', {userId:req.params.user_id});
-  //res.sendFile('/Dev/slack-hackathon-transcribe-videos/google-picker.html');
 });
 
 receiver.router.use(express.json())
 receiver.router.post('/file', (req, res) => {
-  console.log("file chosen")
-  console.log(req.body);
-  console.log(req.body.fileId);
-  // create user objectg with authtoken and slackUserId
-  // UserId -> file
-  // UserId -> authToken 
-  // fileId -> channelId 
   const slackUserId = req.body.slackUserId;
   const fileId = req.body.fileId;
   const authToken = req.body.authToken;
   userIdToFileId.set(slackUserId, fileId);
   userIdToAuthToken.set(slackUserId, authToken);
 
-  // function to get the file from google drive API and download so we can transcribe it
-  // map of fileId to saved file from google drive 
-
   if(userIdToChannelId.has(slackUserId)){
-    //function to kick off message at least to user saying the transcribing will start soon 
-    //Get location to downloaded file and kick off the transcribe process
-    //this will be repeated when you choose the slack channel 
+    transcribeFileForUser(slackUserId, fileId, userIdToChannelId.get(slackId));
   }
 
   res.sendStatus(200);
@@ -161,12 +141,7 @@ app.action('first_button', async({action, body, ack, context, respond}) => {
   //await say('Thanks for clicking the fancy button');
 });
 
-// Listen and respond to button click
 app.action('second_button', async({action, client, body, ack, context}) => {
-  console.log('button clicked hi there second button');
-  console.log(action);
-  console.log(body.trigger_id);
-  // acknowledge the request right away
   await ack();
 
   try {
@@ -227,38 +202,30 @@ app.view('slack_channel_modal', async ({ ack, body, view, client, logger }) => {
   console.log('body', body['view']['state']['values']['target_channel']);
   console.log('view of view submission', view);
   console.log('view', view['state']['values']['target_channel'])
-  console.log("input from select channel modal")
-  console.log(selected_channels);
-  console.log(user);
-  console.log(user.id);
 
-  //need to handle the case where a user hasn't chosen the fileId, could just have a message saying please choose a file from google drive 
-  // Message to send user
-  let msg = '';
-  // Save to DB
-  //const results = await db.set(user.input, val);
   userIdToChannelId.set(user.id, selected_channels);
 
   if (userIdToFileId.has(user.id)) {
-    // DB save was successful
-    msg = 'We have started your video transcribing';
     transcribeFileForUser(user.id, userIdToFileId.get(user.id), userIdToChannelId.get(user.id));
   } else {
-    msg = 'Please choose a file from google drive to transcribe';
+    message = 'Please choose a file from google drive to transcribe';
+    sendMessageToUser(message, user.id);
   }
+});
 
+async function sendMessageToUser(message, userId){
   // Message the user
   try {
-    await client.chat.postMessage({
-      channel: user.id,
-      text: msg
+    await app.client.chat.postMessage({
+      channel: userId,
+      text: message
     });
   }
   catch (error) {
     console.log(error);
   }
-  
-});
+
+}
 
 function transcribeFileForUser(user_id, fileId, channelId) {
   fs.readFile(__dirname + '/credentials.json', (err, content) => {
@@ -278,7 +245,6 @@ async function downloadFileToTranscribe(credentials, file_id, user_id, channelId
   console.log(authToken);
   const oAuth2Client = new google.auth.OAuth2(
       client_id, client_secret);
-  // Check if we have previously stored a token.
   oAuth2Client.setCredentials({access_token: authToken});
 
   const drive = google.drive({version: 'v3', oAuth2Client});
@@ -287,11 +253,12 @@ async function downloadFileToTranscribe(credentials, file_id, user_id, channelId
   const testVideoFilePath = path.join(__dirname, testVideoFileName);
   console.log("video file path");
   console.log(testVideoFilePath);
-  //transformVideoFileToAudioFile(testVideoFileName, channelId);
 
   const fileInfo = await getFileInfo(file_id, oAuth2Client, drive);
   const driveUrl = fileInfo.webViewLink;
   const fileName = fileInfo.name;
+  const message = "We have started transcribing your video " + fileName;
+  sendMessageToUser(message, user_id);
   const slackPostMessage = fileName + ' : ' + driveUrl + ' see Transcript in thread';
   console.log("waiting for ", driveUrl);
   const filePath =  await downloadFile(file_id, oAuth2Client, drive);
@@ -358,10 +325,6 @@ function transformVideoFileToAudioFile(videoFilePath, channelId, driveUrl){
 // Creates a client
 const speechClient = new speech.SpeechClient();
 
-/**
- * TODO(developer): Uncomment the following lines before running the sample.
- */
-// const filename = 'Local path to audio file, e.g. /path/to/audio.raw';
 const model = 'video';
 const encoding = 'FLAC';
 const sampleRateHertz = 16000;
@@ -390,20 +353,19 @@ async function transcribeAudioFile(audioFileName, channelId, driveUrl){
   };
 
   // Detects speech in the audio file
-  const [response] = await speechClient.recognize(request);
+  const [operation] = await speechClient.longRunningRecognize(request);
+  //const [response] = await speechClient.recognize(request);
+  const [response] = await operation.promise();
 
   var transcriptTimeStamp = []
   var totalTimeSeconds = Number(0);
-  const timeStampInterval = Number(2);
+  const timeStampInterval = Number(6);
   response.results.forEach(result => {
     console.log(`Transcription: ${result.alternatives[0].transcript}`);
     var startTime = Number(0);
     console.log('startTime', startTime);
     var transcriptTimeStampSentence = '0.00' + '\n';
-    // in the form 0.00, 0.10, 1.16
     result.alternatives[0].words.forEach(wordInfo => {
-      // NOTE: If you have a time offset exceeding 2^32 seconds, use the
-      // wordInfo.{x}Time.seconds.high to calculate seconds.
       const wordStartSec = Number(wordInfo.startTime.seconds);
       totalTimeSeconds = wordStartSec;
       const timeBetweenWords = wordStartSec - startTime;
@@ -428,11 +390,6 @@ async function transcribeAudioFile(audioFileName, channelId, driveUrl){
 }
 
 async function sendTranscriptToChannel(transcriptTimeStamp, channelId, driveUrl){
-  // Message the channelId associated with video
-  // the text would like it to be a link to google drive file?
-  console.log("channel id") 
-  console.log(channelId);
-  const msg ='testing stuff';
   try {
     const response = await app.client.chat.postMessage({
       channel: channelId[0],
